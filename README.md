@@ -247,8 +247,6 @@ Now that both the Node.js and Python applications are deployed, you can watch me
     az group delete --name <RESOURCE_GROUP>
     ```
 
-
-
 ## Deploying your code
 
 Now that you're successfully working with Dapr, you probably want to update the code to fit your scenario. The Node.js and Python apps that make up this quickstart are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
