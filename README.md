@@ -1,19 +1,19 @@
 # Hello Dapr
 
-This tutorial will get you up and running with Dapr in a Kubernetes cluster using [Dapr AKS Extension](https://learn.microsoft.com/en-us/azure/aks/dapr-overview). You'll be deploying a Node.js app that subscribes to order messages and persists them in [Azure Cache For Redis](https://learn.microsoft.com/en-us/azure/azure-cache-for-redis). Later on, you'll deploy a Python app to act as the publisher. The following architecture diagram illustrates the components that make up this quickstart:
+This tutorial will get you up and running with Dapr in a Kubernetes cluster using [Dapr AKS Extension](https://learn.microsoft.com/azure/aks/dapr-overview). You'll be deploying a Node.js app that subscribes to order messages and persists them in [Azure Cache For Redis](https://learn.microsoft.com/azure/azure-cache-for-redis). Later on, you'll deploy a Python app to act as the publisher. The following architecture diagram illustrates the components that make up this quickstart:
 
 ![Architecture Diagram](./img/Architecture_Diagram.png)
 
 ## Prerequisites
 
 - An Azure subscription. If you don't have an Azure subscription, you can create a [free account](https://azure.microsoft.com/free).
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) or [Azure PowerShell](https://learn.microsoft.com/en-us/powershell/azure/install-az-ps) installed.
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) or [Azure PowerShell](https://learn.microsoft.com/powershell/azure/install-az-ps) installed.
 - An AKS Cluster with
-  - [Workload Identity](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster) enabled.
-  - [Managed identity](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
-  - [A Kubernetes service account](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account)
-  - [Federated identity credential](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
-  - [Dapr cluster extension](https://learn.microsoft.com/en-us/azure/aks/dapr-overview) installed on the AKS cluster.
+  - [Workload Identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster) enabled.
+  - [Managed identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
+  - [A Kubernetes service account](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account)
+  - [Federated identity credential](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
+  - [Dapr cluster extension](https://learn.microsoft.com/azure/aks/dapr-overview) installed on the AKS cluster.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed locally.
 
 ## Clone the repository
@@ -32,14 +32,14 @@ This tutorial will get you up and running with Dapr in a Kubernetes cluster usin
 
 Open the [Azure portal](https://portal.azure.com/#create/Microsoft.Cache) to start the Azure Cache for Redis creation flow.
 
-1. Follow the instructions in the [Create an open-source Redis cache quickstart](https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/quickstart-create-redis).
+1. Follow the instructions in the [Create an open-source Redis cache quickstart](https://learn.microsoft.com/azure/azure-cache-for-redis/quickstart-create-redis).
 1. Fill out the necessary information.
 1. Select Create to start the Redis instance deployment.
 1. Take note of:
    - The hostname of your Redis instance, which you can retrieve from the **Overview** section of your cache in Azure. The hostname might be similar to the following example: `xxxxxx.redis.cache.windows.net`. It will be used to replace `<REDIS_HOST>` later in the `redis.yaml` file.
    - The SSL Port of the Redis cache instance, which you can retrieve from the **Advanced Settings** blade in your cache in the portal. The default value of the port is 6380. It will be used to replace `<REDIS_PORT>` later in the `redis.yaml` file.
 1. Ensure `Microsoft Entra Authentication` is enabled under **Authentication** blade.
-1. Add the [managed Identity](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-a-managed-identity) used for enabling workload idenity in AKS Cluster as Redis User with `Data Owner` permissions under `Data Access Configuration` blade.
+1. Add the [managed Identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-managed-identity) used for enabling workload idenity in AKS Cluster as Redis User with `Data Owner` permissions under `Data Access Configuration` blade.
 1. For this quickstart scenario, click **Enable public network access**
 
 ## Create Redis statestore component
@@ -84,10 +84,10 @@ Before continuing, make sure you've set up an AKS cluster with workload identity
 
 1. Navigate to the `deploy` directory and open `node.yaml`.
 
-1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). 
+1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). 
    - This should be the same service account which is used to create the federated credential.
 
-1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
+1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
     ```yaml
     labels:
       app: node
@@ -158,9 +158,9 @@ This section deploys the Node.js app to Kubernetes. The Dapr control plane autom
 
 1. Navigate to the `deploy` directory and open `python.yaml`.
 
-1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). This should be the same service account [which is used for the node.js app](#configure-the-nodejs-app).
+1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). This should be the same service account [which is used for the node.js app](#configure-the-nodejs-app).
 
-1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
+1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
 
     ```yaml
     labels:
@@ -249,7 +249,7 @@ Now that both the Node.js and Python applications are deployed, you can watch me
 
 ## Deploying your code
 
-Now that you're successfully working with Dapr, you probably want to update the code to fit your scenario. The Node.js and Python apps that make up this quickstart are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
+Now that you're successfully working with Dapr, you probably want to update the code to fit your scenario. The Node.js and Python apps that make up this quickstart are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
 
 1. Update Node or Python code as you see fit!
 2. Navigate to the directory of the app you want to build a new image for, e.g. `node` or `python`.
