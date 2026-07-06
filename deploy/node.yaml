@@ -36,7 +36,7 @@ spec:
         dapr.io/app-port: "3000"
         dapr.io/enable-api-logging: "true"
     spec:
-      serviceAccountName: <SERVICE_ACCOUNT_NAME>
+      serviceAccountName: workload-sa
       containers:
       - name: node
         image: ghcr.io/dapr/samples/hello-k8s-node:latest

@@ -24,6 +24,8 @@ const daprGRPCEndpoint = process.env.DAPR_GRPC_ENDPOINT ?? "http://localhost:500
 
 const stateStoreName = process.env.STATE_STORE_NAME ?? "statestore";
 const stateUrl = `${daprHttpEndpoint}/v1.0/state/${stateStoreName}`;
+const daprHttpPort = process.env.DAPR_HTTP_PORT ?? "3500";
+const daprGRPCPort = process.env.DAPR_GRPC_PORT ?? "50001";
 const port = process.env.APP_PORT ?? "3000";
 
 app.get('/order', async (_req, res) => {
@@ -73,7 +75,7 @@ app.post('/neworder', async (req, res) => {
 app.get('/ports', (_req, res) => {
     console.log("DAPR_HTTP_ENDPOINT: " + daprHttpEndpoint);
     console.log("DAPR_GRPC_ENDPOINT: " + daprGRPCEndpoint);
-    res.status(200).send({DAPR_HTTP_ENDPOINT: daprHttpEndpoint, DAPR_GRPC_ENDPOINT: daprGRPCEndpoint })
+    res.status(200).send({DAPR_HTTP_PORT: daprHttpPort, DAPR_GRPC_PORT: daprGRPCPort })
 });
 
 app.listen(port, () => console.log(`Node App listening on port ${port}!`));

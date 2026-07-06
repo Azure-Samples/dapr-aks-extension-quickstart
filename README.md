@@ -1,6 +1,6 @@
 # Hello Dapr
 
-This tutorial will get you up and running with Dapr in a Kubernetes cluster using [Dapr AKS Extension](https://learn.microsoft.com/azure/aks/dapr-overview). You'll be deploying a Node.js app that subscribes to order messages and persists them in [Azure Cache For Redis](https://learn.microsoft.com/azure/azure-cache-for-redis). Later on, you'll deploy a Python app to act as the publisher. The following architecture diagram illustrates the components that make up this quickstart:
+This tutorial will get you up and running with Dapr in a Kubernetes cluster using [Dapr AKS Extension](https://learn.microsoft.com/azure/aks/dapr-overview). You'll be deploying a Node.js app that subscribes to order messages and persists them in [Azure Managed Redis](https://learn.microsoft.com/azure/redis/overview). Later on, you'll deploy a Python app to act as the publisher. The following architecture diagram illustrates the components that make up this quickstart:
 
 ![Architecture Diagram](./img/Architecture_Diagram.png)
 
@@ -16,6 +16,28 @@ This tutorial will get you up and running with Dapr in a Kubernetes cluster usin
   - [Dapr cluster extension](https://learn.microsoft.com/azure/aks/dapr-overview) installed on the AKS cluster.
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed locally.
 
+## Use WSL (Linux shell)
+
+Run this quickstart from WSL because AKS tooling and shell commands are Linux-first.
+
+1. If needed, install Ubuntu:
+
+    ```powershell
+    wsl --install -d Ubuntu
+    ```
+
+1. Open Ubuntu and complete first-time setup (create Linux username and password).
+
+1. Verify tools from WSL:
+
+    ```bash
+    command -v az
+    command -v kubectl
+    command -v curl
+    ```
+
+If `az` or `kubectl` is not available in WSL, install them in WSL before continuing.
+
 ## Clone the repository
 
 1. Clone this repository using git clone command:
@@ -30,17 +52,46 @@ This tutorial will get you up and running with Dapr in a Kubernetes cluster usin
 
 ## Create and Configure a Redis Store
 
-Open the [Azure portal](https://portal.azure.com/#create/Microsoft.Cache) to start the Azure Cache for Redis creation flow.
+Azure Managed Redis is the replacement for Azure Cache for Redis. This sample uses the same Dapr `state.redis` component, but you should provision an Azure Managed Redis instance and use its hostname, TLS port, and Microsoft Entra authentication model.
 
-1. Follow the instructions in the [Create an open-source Redis cache quickstart](https://learn.microsoft.com/azure/azure-cache-for-redis/quickstart-create-redis).
-1. Fill out the necessary information.
-1. Select Create to start the Redis instance deployment.
-1. Take note of:
-   - The hostname of your Redis instance, which you can retrieve from the **Overview** section of your cache in Azure. The hostname might be similar to the following example: `xxxxxx.redis.cache.windows.net`. It will be used to replace `<REDIS_HOST>` later in the `redis.yaml` file.
-   - The SSL Port of the Redis cache instance, which you can retrieve from the **Advanced Settings** blade in your cache in the portal. The default value of the port is 6380. It will be used to replace `<REDIS_PORT>` later in the `redis.yaml` file.
-1. Ensure `Microsoft Entra Authentication` is enabled under **Authentication** blade.
-1. Add the [managed Identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-managed-identity) used for enabling workload idenity in AKS Cluster as Redis User with `Data Owner` permissions under `Data Access Configuration` blade.
-1. For this quickstart scenario, click **Enable public network access**
+1. Follow the [Quickstart: Create a Managed Redis cache](https://learn.microsoft.com/azure/redis/quickstart-create-managed-redis).
+1. When creating the cache:
+    - Choose **Azure Managed Redis** in the portal.
+    - On **Networking**, select **Enable public access from all networks** for this quickstart scenario.
+    - Keep Microsoft Entra authentication enabled. Azure Managed Redis enables it by default for new caches.
+1. After deployment completes, collect the connection details from the cache:
+    - The host name from **Overview**. Azure Managed Redis host names look like `my-cache.eastus.redis.azure.net`.
+    - The TLS port. Azure Managed Redis uses TLS, and the default TLS port is typically `10000`.
+1. Enable access keys on the default database (used by this quickstart's Redis secret path):
+
+        ```bash
+        az redisenterprise database update \
+            --cluster-name <REDIS_NAME> \
+            --resource-group <RESOURCE_GROUP> \
+            --access-keys-auth Enabled
+        ```
+
+1. Retrieve the primary access key:
+
+        ```bash
+        az redisenterprise database list-keys \
+            --cluster-name <REDIS_NAME> \
+            --resource-group <RESOURCE_GROUP> \
+            --query primaryKey \
+            -o tsv
+        ```
+
+1. If you prefer CLI, verify the host name and TLS port with:
+
+    ```bash
+    az redisenterprise show \
+      --name <REDIS_NAME> \
+      --resource-group <RESOURCE_GROUP> \
+      --query "{hostName: hostName, sslPort: sslPort}" \
+      --output table
+    ```
+
+For Azure Managed Redis samples and migration guidance, see the [Azure Managed Redis GitHub organization](https://github.com/AzureManagedRedis).
 
 ## Create Redis statestore component
 
@@ -48,27 +99,30 @@ Open the [Azure portal](https://portal.azure.com/#create/Microsoft.Cache) to sta
 
 1. In your preferred code editor, navigate to the `deploy` directory in the sample and open `redis.yaml`.
 
-1. Replace the `redisHost` value with the `<REDIS_HOST>:<REDIS_PORT>` [you saved earlier from Azure portal](#create-and-configure-a-redis-store). The value would be similar to the following example: `xxxxxx.redis.cache.windows.net:6380`.
+1. Replace the `redisHost` value with the `<REDIS_HOST>:<REDIS_PORT>` [you saved earlier from Azure portal](#create-and-configure-a-redis-store). The value would be similar to the following example: `my-cache.eastus.redis.azure.net:10000`.
 
-1. Note that the component is configured to use Entra ID Authentication using workload identity enabled for AKS cluster, so no access keys are required. 
-    ```yaml
-    - name: useEntraID
-      value: "true"
-    - name: enableTLS
-      value: true
-    ```
+1. Create the Kubernetes secret used by `redisPassword` in `deploy/redis.yaml`:
+
+        ```bash
+        kubectl create secret generic redis-secret \
+            --from-literal=redisPassword='<REDIS_PRIMARY_KEY>'
+        ```
+
+1. This sample's statestore metadata is configured to use key auth over TLS (`redisPassword` + `enableTLS: true`).
 
 ### Apply the configuration
 
 Before continuing, make sure you've set up an AKS cluster with workload identity, managed identity, a Kubernetes service account, and federated identity credentials. See the [prerequisites](#prerequisites) for links to instructions.
 
 1. In the terminal, apply the `redis.yaml` file using the `kubectl apply` command.
+
     ```bash
     kubectl apply -f ./deploy/redis.yaml
     ```
 
     You should see output similar to the following example output:
-    ```
+
+    ```text
     component.dapr.io/statestore created
     ```
 
@@ -78,16 +132,23 @@ Before continuing, make sure you've set up an AKS cluster with workload identity
     kubectl get component statestore -o yaml
     ```
 
+If the component fails to connect, verify the `redis-secret` value and confirm the cache host name and TLS port with `az redisenterprise show`.
+
 ## Deploy the Node.js app with the Dapr sidecar
 
 ### Configure the Node.js app
 
-1. Navigate to the `deploy` directory and open `node.yaml`.
+1. Navigate to the `deploy` directory and open `workload-identity.yaml`.
 
-1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). 
-   - This should be the same service account which is used to create the federated credential.
+1. Replace `<MANAGED_IDENTITY_CLIENT_ID>` with the client ID of the user-assigned managed identity you created.
 
-1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
+1. Apply the service account manifest before deploying the app manifests.
+
+    ```bash
+    kubectl apply -f ./deploy/workload-identity.yaml
+    ```
+
+1. Note that the pod spec has the label added to use workload identity, as described in the [AKS workload identity deployment guide](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
     ```yaml
     labels:
       app: node
@@ -131,8 +192,17 @@ This section deploys the Node.js app to Kubernetes. The Dapr control plane autom
     You should see output similar to the following example output:
 
     ```
-    {"DAPR_HTTP_PORT":"3500","DAPR_GRPC_PORT":"50001"}
+        {"DAPR_HTTP_PORT":"3500","DAPR_GRPC_PORT":"50001"}
     ```
+
+1. If EXTERNAL-IP is unreachable due network restrictions, validate from inside the cluster instead:
+
+        ```bash
+        kubectl run curltester --image=curlimages/curl:8.9.1 --restart=Never --command -- \
+            sh -c "curl -sS http://nodeapp/ports ; echo ; curl -sS http://nodeapp/order"
+        kubectl logs curltester
+        kubectl delete pod curltester --ignore-not-found
+        ```
 
 1. Submit an order to the application using curl.
 
@@ -156,16 +226,14 @@ This section deploys the Node.js app to Kubernetes. The Dapr control plane autom
 
 ### Configure the Python app
 
-1. Navigate to the `deploy` directory and open `python.yaml`.
+1. The Python deployment also uses the shared `workload-sa` service account created in [Configure the Node.js app](#configure-the-nodejs-app).
 
-1. Replace the `<SERVICE_ACCOUNT_NAME>` with [the service account name you created](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account). This should be the same service account [which is used for the node.js app](#configure-the-nodejs-app).
-
-1. Note that the pod spec has the label added to use workload identity, as mentioned [here](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
+1. Note that the pod spec has the label added to use workload identity, as described in the [AKS workload identity deployment guide](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
 
     ```yaml
-    labels:
-      app: node
-      azure.workload.identity/use: "true"
+        labels:
+            app: python
+            azure.workload.identity/use: "true"
     ```
 
 ### Apply the configuration

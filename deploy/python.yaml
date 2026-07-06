@@ -19,7 +19,7 @@ spec:
         dapr.io/app-id: "pythonapp"
         dapr.io/enable-api-logging: "true"
     spec:
-      serviceAccountName: <SERVICE_ACCOUNT_NAME>
+      serviceAccountName: workload-sa
       containers:
       - name: python
         image: ghcr.io/dapr/samples/hello-k8s-python:latest
