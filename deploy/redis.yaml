@@ -7,9 +7,13 @@ spec:
   version: v1
   metadata:
   - name: redisHost
-    value: <REDIS_HOST>:<REDIS_PORT>
+    value: <REDIS_HOST>:10000
+  - name: redisPassword
+    secretKeyRef:
+      name: redis-secret
+      key: redisPassword
   - name: useEntraID
-    value: "true"
+    value: "false"
   - name: enableTLS
     value: true
 auth:
