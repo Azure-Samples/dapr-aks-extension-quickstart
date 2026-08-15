@@ -11,7 +11,7 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 3000
-  type: LoadBalancer
+  type: ClusterIP
 
 ---
 apiVersion: apps/v1
@@ -29,14 +29,12 @@ spec:
     metadata:
       labels:
         app: node
-        azure.workload.identity/use: "true"
       annotations:
         dapr.io/enabled: "true"
         dapr.io/app-id: "nodeapp"
         dapr.io/app-port: "3000"
         dapr.io/enable-api-logging: "true"
     spec:
-      serviceAccountName: workload-sa
       containers:
       - name: node
         image: ghcr.io/dapr/samples/hello-k8s-node:latest

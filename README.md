@@ -1,334 +1,262 @@
-# Hello Dapr
+---
+page_type: sample
+languages:
+  - shell
+  - javascript
+  - python
+  - dockerfile
+products:
+  - azure
+  - azure-kubernetes-service
+  - azure-managed-redis
+urlFragment: dapr-aks-extension-quickstart
+name: Dapr AKS Extension Quickstart
+description: Deploy two applications with Dapr sidecars on AKS and persist state in Azure Managed Redis.
+---
 
-This tutorial will get you up and running with Dapr in a Kubernetes cluster using [Dapr AKS Extension](https://learn.microsoft.com/azure/aks/dapr-overview). You'll be deploying a Node.js app that subscribes to order messages and persists them in [Azure Managed Redis](https://learn.microsoft.com/azure/redis/overview). Later on, you'll deploy a Python app to act as the publisher. The following architecture diagram illustrates the components that make up this quickstart:
+# Dapr AKS Extension Quickstart
 
-![Architecture Diagram](./img/Architecture_Diagram.png)
+Deploy a Node.js application and Python publisher to an existing Azure Kubernetes Service (AKS) cluster with the Dapr extension. The sample demonstrates sidecar injection, service invocation, and state management backed by Azure Managed Redis.
+
+![Architecture diagram](./img/Architecture_Diagram.png)
+
+> [!NOTE]
+> This repository is a learning sample, not a production architecture. The automated flow keeps the application private and creates resources in an isolated Kubernetes namespace.
+
+## What you will learn
+
+- How Dapr sidecars are injected into Kubernetes pods.
+- How applications invoke each other by Dapr app ID.
+- How the Dapr state API separates application code from Redis connection logic.
+- How to inspect application and `daprd` logs.
+- How to access a private Kubernetes service with temporary port-forwarding.
 
 ## Prerequisites
 
-- An Azure subscription. If you don't have an Azure subscription, you can create a [free account](https://azure.microsoft.com/free).
-- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) or [Azure PowerShell](https://learn.microsoft.com/powershell/azure/install-az-ps) installed.
-- An AKS Cluster with
-  - [Workload Identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster) enabled.
-  - [Managed identity](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
-  - [A Kubernetes service account](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-a-kubernetes-service-account)
-  - [Federated identity credential](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#create-an-aks-cluster)
-  - [Dapr cluster extension](https://learn.microsoft.com/azure/aks/dapr-overview) installed on the AKS cluster.
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed locally.
+You need:
 
-## Use WSL (Linux shell)
+- A Bash-compatible shell such as WSL, Linux, or macOS.
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli).
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
+- `curl`.
+- An existing AKS cluster with the [Dapr extension](https://learn.microsoft.com/azure/aks/dapr-overview).
+- An existing Azure Managed Redis instance with:
+  - Network access from the AKS cluster.
+  - Access-key authentication enabled for this learning scenario.
 
-Run this quickstart from WSL because AKS tooling and shell commands are Linux-first.
+Confirm that the tools are available:
 
-1. If needed, install Ubuntu:
+```bash
+az version
+kubectl version --client
+curl --version
+```
 
-    ```powershell
-    wsl --install -d Ubuntu
-    ```
+## Quickstart
 
-1. Open Ubuntu and complete first-time setup (create Linux username and password).
+### 1. Clone and configure
 
-1. Verify tools from WSL:
+```bash
+git clone https://github.com/Azure-Samples/dapr-aks-extension-quickstart.git
+cd dapr-aks-extension-quickstart
+cp .env.example .env
+```
 
-    ```bash
-    command -v az
-    command -v kubectl
-    command -v curl
-    ```
+Edit `.env` with the names of your existing Azure resources:
 
-If `az` or `kubectl` is not available in WSL, install them in WSL before continuing.
+```dotenv
+AZURE_SUBSCRIPTION_ID=<subscription-id>
+AKS_RESOURCE_GROUP=<aks-resource-group>
+AKS_CLUSTER_NAME=<aks-cluster-name>
+REDIS_RESOURCE_GROUP=<redis-resource-group>
+REDIS_NAME=<redis-name>
 
-## Clone the repository
+K8S_NAMESPACE=dapr-quickstart
+LOCAL_PORT=8080
+```
 
-1. Clone this repository using git clone command:
-    ```bash
-    git clone https://github.com/Azure-Samples/dapr-aks-extension-quickstart
-    ```
+The file contains resource identifiers only. The Redis key is retrieved at runtime and isn't written to `.env`.
 
-1. Navigate to the repository using `cd`:
-    ```bash
-    cd dapr-aks-extension-quickstart
-    ```
+### 2. Deploy and verify
 
-## Create and Configure a Redis Store
+```bash
+./scripts/quickstart.sh deploy --config .env
+```
 
-Azure Managed Redis is the replacement for Azure Cache for Redis. This sample uses the same Dapr `state.redis` component, but you should provision an Azure Managed Redis instance and use its hostname, TLS port, and Microsoft Entra authentication model.
+The script prints and logs each phase:
 
-1. Follow the [Quickstart: Create a Managed Redis cache](https://learn.microsoft.com/azure/redis/quickstart-create-managed-redis).
-1. When creating the cache:
-    - Choose **Azure Managed Redis** in the portal.
-    - On **Networking**, select **Enable public access from all networks** for this quickstart scenario.
-    - Keep Microsoft Entra authentication enabled. Azure Managed Redis enables it by default for new caches.
-1. After deployment completes, collect the connection details from the cache:
-    - The host name from **Overview**. Azure Managed Redis host names look like `my-cache.eastus.redis.azure.net`.
-    - The TLS port. Azure Managed Redis uses TLS, and the default TLS port is typically `10000`.
-1. Enable access keys on the default database (used by this quickstart's Redis secret path):
+1. Connect to the existing AKS cluster.
+1. Verify that Dapr is installed.
+1. Create an isolated namespace and Kubernetes Secret.
+1. Configure the Dapr state-store component.
+1. Deploy the Node.js application and its sidecar.
+1. Verify private access and state persistence.
+1. Deploy the Python publisher and its sidecar.
+1. Verify Dapr service invocation and shared state.
 
-        ```bash
-        az redisenterprise database update \
-            --cluster-name <REDIS_NAME> \
-            --resource-group <RESOURCE_GROUP> \
-            --access-keys-auth Enabled
-        ```
+Successful verification includes output similar to:
 
-1. Retrieve the primary access key:
+```text
+[INFO] Service nodeapp is private: type=ClusterIP, externalIP=none.
+[INFO] GET /order response: {"orderId":"42"}
+[INFO] Python publisher updated the order through Dapr service invocation: {"orderId":19}
+```
 
-        ```bash
-        az redisenterprise database list-keys \
-            --cluster-name <REDIS_NAME> \
-            --resource-group <RESOURCE_GROUP> \
-            --query primaryKey \
-            -o tsv
-        ```
+Logs are saved to:
 
-1. If you prefer CLI, verify the host name and TLS port with:
+```text
+~/.local/state/dapr-aks-extension-quickstart/quickstart-<timestamp>.log
+```
 
-    ```bash
-    az redisenterprise show \
-      --name <REDIS_NAME> \
-      --resource-group <RESOURCE_GROUP> \
-      --query "{hostName: hostName, sslPort: sslPort}" \
-      --output table
-    ```
+Set `DAPR_QUICKSTART_LOG_DIR` to use another directory. Redis credentials and Kubernetes Secret contents aren't logged.
 
-For Azure Managed Redis samples and migration guidance, see the [Azure Managed Redis GitHub organization](https://github.com/AzureManagedRedis).
+### 3. Explore the Dapr concepts
 
-## Create Redis statestore component
+Set this variable to the `K8S_NAMESPACE` value from `.env`:
 
-### Configure the Dapr Component
+```bash
+export QUICKSTART_NAMESPACE=dapr-quickstart
+```
 
-1. In your preferred code editor, navigate to the `deploy` directory in the sample and open `redis.yaml`.
+List the application pods. Each pod should show two containers: the application and `daprd`.
 
-1. Replace the `redisHost` value with the `<REDIS_HOST>:<REDIS_PORT>` [you saved earlier from Azure portal](#create-and-configure-a-redis-store). The value would be similar to the following example: `my-cache.eastus.redis.azure.net:10000`.
+```bash
+kubectl get pods -n "$QUICKSTART_NAMESPACE"
+```
 
-1. Create the Kubernetes secret used by `redisPassword` in `deploy/redis.yaml`:
+Inspect the state-store component:
 
-        ```bash
-        kubectl create secret generic redis-secret \
-            --from-literal=redisPassword='<REDIS_PRIMARY_KEY>'
-        ```
+```bash
+kubectl get component statestore -n "$QUICKSTART_NAMESPACE" -o yaml
+```
 
-1. This sample's statestore metadata is configured to use key auth over TLS (`redisPassword` + `enableTLS: true`).
+Inspect the application service and Dapr-created headless services:
 
-### Apply the configuration
+```bash
+kubectl get services -n "$QUICKSTART_NAMESPACE"
+```
 
-Before continuing, make sure you've set up an AKS cluster with workload identity, managed identity, a Kubernetes service account, and federated identity credentials. See the [prerequisites](#prerequisites) for links to instructions.
+Watch orders received by the Node.js application:
 
-1. In the terminal, apply the `redis.yaml` file using the `kubectl apply` command.
+```bash
+kubectl logs -n "$QUICKSTART_NAMESPACE" -l app=node -c node -f
+```
 
-    ```bash
-    kubectl apply -f ./deploy/redis.yaml
-    ```
+Watch state API calls handled by the Node.js sidecar:
 
-    You should see output similar to the following example output:
+```bash
+kubectl logs -n "$QUICKSTART_NAMESPACE" -l app=node -c daprd -f
+```
 
-    ```text
-    component.dapr.io/statestore created
-    ```
+Re-run the endpoint and service-invocation checks:
 
-1. Verify your state store was successfully configured using the `kubectl get component` command.
+```bash
+./scripts/quickstart.sh verify --config .env
+```
 
-    ```bash
-    kubectl get component statestore -o yaml
-    ```
+### 4. Clean up
 
-If the component fails to connect, verify the `redis-secret` value and confirm the cache host name and TLS port with `az redisenterprise show`.
+```bash
+./scripts/quickstart.sh cleanup --config .env
+```
 
-## Deploy the Node.js app with the Dapr sidecar
+Cleanup deletes only the configured Kubernetes namespace. It doesn't delete the AKS cluster or Azure Managed Redis instance.
 
-### Configure the Node.js app
+## How the sample works
 
-1. Navigate to the `deploy` directory and open `workload-identity.yaml`.
+| Phase | Dapr concept | Kubernetes resource |
+|---|---|---|
+| Configure state | A component supplies the `statestore` building block | `Component/statestore` |
+| Deploy Node.js | Pod annotations request sidecar injection and register app ID `nodeapp` | `Deployment/nodeapp` |
+| Persist state | Node.js calls its local sidecar instead of connecting directly to Redis | `daprd` sidecar |
+| Deploy Python | Python calls its local sidecar with target app ID `nodeapp` | `Deployment/pythonapp` |
+| Invoke service | Dapr resolves the target app and forwards `/neworder` | `nodeapp-dapr` headless service |
+| Access locally | The application remains private inside the cluster | `Service/nodeapp` (`ClusterIP`) |
 
-1. Replace `<MANAGED_IDENTITY_CLIENT_ID>` with the client ID of the user-assigned managed identity you created.
+The sample applications use the same public images as the Dapr OSS Kubernetes quickstart:
 
-1. Apply the service account manifest before deploying the app manifests.
+| Application | Image |
+|---|---|
+| Node.js | `ghcr.io/dapr/samples/hello-k8s-node:latest` |
+| Python | `ghcr.io/dapr/samples/hello-k8s-python:latest` |
 
-    ```bash
-    kubectl apply -f ./deploy/workload-identity.yaml
-    ```
+## Manual deployment
 
-1. Note that the pod spec has the label added to use workload identity, as described in the [AKS workload identity deployment guide](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
-    ```yaml
-    labels:
-      app: node
-      azure.workload.identity/use: "true"
-    ```
+To perform every command individually and examine each resource as it is created, follow [the manual deployment guide](./docs/manual-deployment.md).
 
-### Apply the configuration
+## Troubleshooting
 
-This section deploys the Node.js app to Kubernetes. The Dapr control plane automatically injects the Dapr sidecar to the Pod. If you take a look at the node.yaml file, you see how Dapr is enabled for that deployment:
+### Dapr isn't installed
 
-- `dapr.io/enabled: true`: tells the Dapr control plane to inject a sidecar to this deployment.
-- `dapr.io/app-id: nodeapp`: assigns a unique ID or name to the Dapr application, so it can be sent messages to and communicated with by other Dapr apps.
+If the script reports that `components.dapr.io` is missing, verify the extension:
 
-1. Apply the Node.js app deployment to your cluster using the `kubectl apply` command.
+```bash
+kubectl get pods -n dapr-system
+az k8s-extension list \
+  --cluster-type managedClusters \
+  --cluster-name <aks-cluster-name> \
+  --resource-group <aks-resource-group> \
+  --output table
+```
 
-    ```bash
-    kubectl apply -f ./deploy/node.yaml
-    ```
+### Redis key retrieval fails
 
-1. Note that Kubernetes deployments are asynchronous, which means you need to wait for the deployment to complete before moving on to the next steps. You can do so with the following command:
+Enable access-key authentication on the default database:
 
-    ```bash
-    kubectl rollout status deploy/nodeapp
-    ```
+```bash
+az redisenterprise database update \
+  --cluster-name <redis-name> \
+  --resource-group <redis-resource-group> \
+  --access-keys-auth Enabled
+```
 
-1. Access your service using the `kubectl get svc` command.
-    ```bash
-    kubectl get svc nodeapp
-    ```
+> [!IMPORTANT]
+> Access-key authentication is used to keep this quickstart focused on Dapr concepts. Prefer Microsoft Entra authentication and managed identity for production workloads.
 
-3. Make note of the `EXTERNAL-IP` in the output.
+### Pods don't become ready
 
-## Verify the service
+Inspect pod events and container logs:
 
-1. Call the service using curl with your EXTERNAL-IP.
+```bash
+kubectl describe pods -n dapr-quickstart
+kubectl logs -n dapr-quickstart -l app=node -c node
+kubectl logs -n dapr-quickstart -l app=node -c daprd
+```
 
-    ```bash
-    curl $EXTERNAL_IP/ports
-    ```
+### An Azure Policy warning rejects the sample images
 
-    You should see output similar to the following example output:
+Some clusters restrict images to approved registries. Mirror the images into an approved registry, update `deploy/node.yaml` and `deploy/python.yaml`, and use immutable digests.
 
-    ```
-        {"DAPR_HTTP_PORT":"3500","DAPR_GRPC_PORT":"50001"}
-    ```
+### Local port 8080 is already in use
 
-1. If EXTERNAL-IP is unreachable due network restrictions, validate from inside the cluster instead:
+Change `LOCAL_PORT` in `.env`, then run verification again:
 
-        ```bash
-        kubectl run curltester --image=curlimages/curl:8.9.1 --restart=Never --command -- \
-            sh -c "curl -sS http://nodeapp/ports ; echo ; curl -sS http://nodeapp/order"
-        kubectl logs curltester
-        kubectl delete pod curltester --ignore-not-found
-        ```
+```dotenv
+LOCAL_PORT=18080
+```
 
-1. Submit an order to the application using curl.
+## Why this sample uses a script instead of `azd up`
 
-    ```bash
-    curl --request POST --data "@sample.json" --header Content-Type:application/json $EXTERNAL_IP/neworder
-    ```
+The quickstart intentionally targets an existing AKS cluster and Azure Managed Redis instance. `azd up` normally provisions and owns the complete Azure environment. The script keeps infrastructure ownership explicit while providing the same configure, deploy, verify, log, and clean-up workflow expected from modern Azure samples.
 
-1. Confirm the order has persisted by requesting it using curl.
+## Build your own images
 
-    ```bash
-    curl $EXTERNAL_IP/order
-    ```
+Each application directory contains a Dockerfile:
 
-    You should see output similar to the following example output:
+```bash
+docker build -t <registry>/hello-k8s-node:<tag> ./node
+docker build -t <registry>/hello-k8s-python:<tag> ./python
+```
 
-    ```
-    { "orderId": "42" }
-    ```
-
-## Deploy the Python app with the Dapr sidecar
-
-### Configure the Python app
-
-1. The Python deployment also uses the shared `workload-sa` service account created in [Configure the Node.js app](#configure-the-nodejs-app).
-
-1. Note that the pod spec has the label added to use workload identity, as described in the [AKS workload identity deployment guide](https://learn.microsoft.com/azure/aks/workload-identity-deploy-cluster#deploy-your-application):
-
-    ```yaml
-        labels:
-            app: python
-            azure.workload.identity/use: "true"
-    ```
-
-### Apply the configuration
-
-In the `python` directory, `app.py` is an example of a basic Python app that posts JSON messages to `localhost:3500`, which is the default listening port for Dapr. You can invoke the Node.js application's `neworder` endpoint by posting to `v1.0/invoke/nodeapp/method/neworder`. The message contains some data with an orderId that increments once per second:
-
-   ```python
-   n = 0
-   while True:
-       n += 1
-       message = {"data": {"orderId": n}}
-
-       try:
-           response = requests.post(dapr_url, json=message)
-       except Exception as e:
-           print(e)
-
-       time.sleep(1)
-   ```
-
-1. Deploy the Python app to your Kubernetes cluster using the `kubectl apply` command.
-
-    ```bash
-    kubectl apply -f ./deploy/python.yaml
-    ```
-
-    As with the previous command, you need to wait for the deployment to complete before moving on to the next steps. You can do so with the following command:
-
-    ```bash
-    kubectl rollout status deploy/pythonapp
-    ```
-
-## Observe messages and confirm persistence
-
-Now that both the Node.js and Python applications are deployed, you can watch messages come through.
-
-1. Get the logs of the Node.js app using the kubectl logs command.
-
-    ```bash
-    kubectl logs --selector=app=node -c node --tail=-1
-    ```
-
-    If the deployments were successful, you should see logs like the following example logs:
-
-    ```
-    Got a new order! Order ID: 1
-    Successfully persisted state
-    Got a new order! Order ID: 2
-    Successfully persisted state
-    Got a new order! Order ID: 3
-    Successfully persisted state
-    ```
-
-1. Call the Node.js app's order endpoint to get the latest order using curl.
-
-    ```bash
-    curl $EXTERNAL_IP/order
-    ```
-
-    You should see the latest JSON in the response similar to the following example output:
-
-    ```
-    { "orderId": "42" }
-    ```
-
-##  Cleanup
-
-1. Once you're done, you can spin down your Kubernetes resources by running the following command:
-
-    ```bash
-    kubectl delete -f ./deploy
-    ```
-
-    This spins down each resource defined by the `.yaml` files in the `deploy` directory, including the statestore component, nodeapp, and python app.
-
-1. Remove the resource group, cluster, namespace, and all related resources using the `az group delete` command.
-
-    ```bash
-    az group delete --name <RESOURCE_GROUP>
-    ```
-
-## Deploying your code
-
-Now that you're successfully working with Dapr, you probably want to update the code to fit your scenario. The Node.js and Python apps that make up this quickstart are deployed from container images hosted on a private [Azure Container Registry](https://azure.microsoft.com/services/container-registry/). To create new images with updated code, you'll first need to install docker on your machine. Next, follow these steps:
-
-1. Update Node or Python code as you see fit!
-2. Navigate to the directory of the app you want to build a new image for, e.g. `node` or `python`.
-3. Run `docker build -t <YOUR_IMAGE_NAME> . `. You can name your image whatever you like. If you're planning on hosting it on docker hub, then it should start with `<YOUR_DOCKERHUB_USERNAME>/`.
-4. Once your image has built you can see it on your machines by running `docker images`.
-5. To publish your docker image to docker hub (or another registry), first login: `docker login`. Then run`docker push <YOUR IMAGE NAME>`.
-6. Update your .yaml file to reflect the new image name.
-7. Deploy your updated Dapr enabled app: `kubectl apply -f <YOUR APP NAME>.yaml`.
+Push the images to your approved registry, update the deployment manifests, and prefer immutable image digests over mutable tags.
 
 ## Next steps
 
-- Try out other Dapr APIs and components with OSS [quickstarts](https://github.com/dapr/quickstarts).
-- Learn more about Dapr in the [Dapr overview](https://docs.dapr.io/concepts/overview/) documentation.
-- Explore [Dapr concepts](https://docs.dapr.io/concepts/) such as building blocks and components in the Dapr documentation
+- Explore the [Dapr OSS quickstarts](https://github.com/dapr/quickstarts).
+- Learn about [Dapr service invocation](https://docs.dapr.io/developing-applications/building-blocks/service-invocation/).
+- Learn about [Dapr state management](https://docs.dapr.io/developing-applications/building-blocks/state-management/).
+- Review [production guidance for Dapr on Kubernetes](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/).
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.

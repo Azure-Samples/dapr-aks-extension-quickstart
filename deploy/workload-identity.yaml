@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: workload-sa
-  annotations:
-    azure.workload.identity/client-id: <MANAGED_IDENTITY_CLIENT_ID>

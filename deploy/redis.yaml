@@ -7,7 +7,7 @@ spec:
   version: v1
   metadata:
   - name: redisHost
-    value: <REDIS_HOST>:10000
+    value: <REDIS_HOST>:<REDIS_PORT>
   - name: redisPassword
     secretKeyRef:
       name: redis-secret

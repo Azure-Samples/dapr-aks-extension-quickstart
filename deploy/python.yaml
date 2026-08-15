@@ -13,13 +13,11 @@ spec:
     metadata:
       labels:
         app: python
-        azure.workload.identity/use: "true"
       annotations:
         dapr.io/enabled: "true"
         dapr.io/app-id: "pythonapp"
         dapr.io/enable-api-logging: "true"
     spec:
-      serviceAccountName: workload-sa
       containers:
       - name: python
         image: ghcr.io/dapr/samples/hello-k8s-python:latest
