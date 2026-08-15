@@ -35,50 +35,18 @@ export QUICKSTART_NAMESPACE=dapr-quickstart
 
 ## 3. Configure the state store
 
-Retrieve the Azure Managed Redis endpoint:
+Deploy the Redis pod, private service, and Dapr component:
 
 ```bash
-REDIS_CONNECTION=$(az redisenterprise show \
-  --resource-group <REDIS_RESOURCE_GROUP> \
-  --name <REDIS_NAME> \
-  --query '[hostName, sslPort]' \
-  --output tsv)
+kubectl apply \
+  --namespace "$QUICKSTART_NAMESPACE" \
+  -f deploy/redis.yaml
 
-read -r REDIS_HOST REDIS_PORT <<<"$REDIS_CONNECTION"
+kubectl rollout status deployment/redis \
+  --namespace "$QUICKSTART_NAMESPACE"
 ```
 
-Retrieve the access key without writing it to a file:
-
-```bash
-REDIS_PASSWORD=$(az redisenterprise database list-keys \
-  --resource-group <REDIS_RESOURCE_GROUP> \
-  --cluster-name <REDIS_NAME> \
-  --query primaryKey \
-  --output tsv)
-```
-
-Create a Kubernetes Secret. The secret value is passed through standard input and isn't stored in the repository:
-
-```bash
-printf '%s' "$REDIS_PASSWORD" \
-  | kubectl create secret generic redis-secret \
-      --namespace "$QUICKSTART_NAMESPACE" \
-      --from-file=redisPassword=/dev/stdin
-
-unset REDIS_PASSWORD
-```
-
-Create the Dapr component:
-
-```bash
-sed \
-  -e "s#<REDIS_HOST>#$REDIS_HOST#g" \
-  -e "s#<REDIS_PORT>#$REDIS_PORT#g" \
-  deploy/redis.yaml \
-  | kubectl apply --namespace "$QUICKSTART_NAMESPACE" -f -
-```
-
-The `Component` resource tells Dapr how to provide the `statestore` building block. Application code uses the Dapr state API and doesn't contain Redis-specific connection logic.
+Redis uses an `emptyDir` volume, so the quickstart data is temporary. The `Component` resource tells Dapr how to provide the `statestore` building block without adding Redis connection logic to the application.
 
 Inspect the component:
 
@@ -198,4 +166,4 @@ Delete the isolated namespace and all quickstart resources inside it:
 kubectl delete namespace "$QUICKSTART_NAMESPACE"
 ```
 
-This doesn't delete the AKS cluster or Azure Managed Redis instance.
+This doesn't delete the AKS cluster.

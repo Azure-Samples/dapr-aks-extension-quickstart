@@ -8,7 +8,7 @@ This quickstart demonstrates:
 
 - Dapr sidecar injection.
 - Service invocation using Dapr app IDs.
-- State management backed by Azure Managed Redis.
+- State management backed by an in-cluster Redis pod.
 
 ## Prerequisites
 
@@ -17,7 +17,6 @@ This quickstart demonstrates:
 - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
 - `curl`.
 - An AKS cluster with the [Dapr extension](https://learn.microsoft.com/azure/aks/dapr-overview).
-- Azure Managed Redis with network access from AKS and access-key authentication enabled.
 
 ## Quickstart
 
@@ -35,14 +34,10 @@ Update `.env` with your existing Azure resources:
 AZURE_SUBSCRIPTION_ID=<subscription-id>
 AKS_RESOURCE_GROUP=<aks-resource-group>
 AKS_CLUSTER_NAME=<aks-cluster-name>
-REDIS_RESOURCE_GROUP=<redis-resource-group>
-REDIS_NAME=<redis-name>
 
 K8S_NAMESPACE=dapr-quickstart
 LOCAL_PORT=8080
 ```
-
-The Redis key is retrieved at runtime and isn't stored in `.env`.
 
 ### 2. Deploy
 
@@ -93,13 +88,13 @@ Run the verification again:
 ./scripts/quickstart.sh cleanup --config .env
 ```
 
-Cleanup removes only the quickstart Kubernetes namespace. It doesn't delete AKS or Azure Managed Redis.
+Cleanup removes only the quickstart Kubernetes namespace. It doesn't delete AKS.
 
 ## How it works
 
 | Step | Dapr concept |
 |---|---|
-| Configure `statestore` | Dapr connects to Azure Managed Redis through a component. |
+| Configure `statestore` | Dapr connects to the in-cluster Redis service through a component. |
 | Deploy `nodeapp` | Pod annotations inject a sidecar and register app ID `nodeapp`. |
 | Save an order | Node.js calls the local Dapr state API. |
 | Deploy `pythonapp` | Python invokes `nodeapp` through its local sidecar. |
@@ -127,15 +122,6 @@ Check application status and logs:
 kubectl get pods -n dapr-quickstart
 kubectl describe pods -n dapr-quickstart
 kubectl logs -n dapr-quickstart -l app=node -c daprd
-```
-
-If Redis key retrieval fails, enable access-key authentication:
-
-```bash
-az redisenterprise database update \
-  --cluster-name <redis-name> \
-  --resource-group <redis-resource-group> \
-  --access-keys-auth Enabled
 ```
 
 ## Next steps

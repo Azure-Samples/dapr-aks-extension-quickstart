@@ -13,8 +13,6 @@ fi
 SUBSCRIPTION="${AZURE_SUBSCRIPTION_ID:-}"
 RESOURCE_GROUP="${AKS_RESOURCE_GROUP:-}"
 CLUSTER="${AKS_CLUSTER_NAME:-}"
-REDIS_RESOURCE_GROUP="${REDIS_RESOURCE_GROUP:-}"
-REDIS_NAME="${REDIS_NAME:-}"
 NAMESPACE="${K8S_NAMESPACE:-dapr-quickstart}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
 PORT_FORWARD_PID=""
@@ -29,8 +27,6 @@ Usage:
     [--subscription <subscription-id>] \
     [--resource-group <aks-resource-group>] \
     [--cluster <aks-cluster-name>] \
-    [--redis-resource-group <redis-resource-group>] \
-    [--redis-name <redis-name>] \
     [--namespace dapr-quickstart] [--local-port 8080]
 
   ./scripts/quickstart.sh verify \
@@ -152,12 +148,6 @@ load_config() {
             AKS_CLUSTER_NAME)
                 CLUSTER="${value}"
                 ;;
-            REDIS_RESOURCE_GROUP)
-                REDIS_RESOURCE_GROUP="${value}"
-                ;;
-            REDIS_NAME)
-                REDIS_NAME="${value}"
-                ;;
             K8S_NAMESPACE)
                 NAMESPACE="${value}"
                 ;;
@@ -208,16 +198,6 @@ while [[ $# -gt 0 ]]; do
         --cluster)
             [[ $# -ge 2 ]] || fail "$1 requires a value."
             CLUSTER="${2:-}"
-            shift 2
-            ;;
-        --redis-resource-group)
-            [[ $# -ge 2 ]] || fail "$1 requires a value."
-            REDIS_RESOURCE_GROUP="${2:-}"
-            shift 2
-            ;;
-        --redis-name)
-            [[ $# -ge 2 ]] || fail "$1 requires a value."
-            REDIS_NAME="${2:-}"
             shift 2
             ;;
         --namespace)
@@ -305,11 +285,6 @@ verify_python() {
 }
 
 deploy() {
-    local redis_connection
-    local redis_host
-    local redis_port
-    local redis_password
-
     require_command az
     require_command kubectl
     require_command curl
@@ -317,8 +292,6 @@ deploy() {
     require_value "--subscription" "${SUBSCRIPTION}"
     require_value "--resource-group" "${RESOURCE_GROUP}"
     require_value "--cluster" "${CLUSTER}"
-    require_value "--redis-resource-group" "${REDIS_RESOURCE_GROUP}"
-    require_value "--redis-name" "${REDIS_NAME}"
     validate_namespace
     validate_local_port
 
@@ -329,45 +302,14 @@ deploy() {
         || fail "Dapr is not installed on the AKS cluster."
     info "Dapr component CRD is installed."
 
-    step "Reading the Azure Managed Redis endpoint and access key"
-    redis_connection="$(az redisenterprise show \
-        --resource-group "${REDIS_RESOURCE_GROUP}" \
-        --name "${REDIS_NAME}" \
-        --query '[hostName, sslPort]' \
-        --output tsv)"
-    read -r redis_host redis_port <<<"${redis_connection}"
-    [[ -n "${redis_host}" && -n "${redis_port}" ]] \
-        || fail "Could not determine the Azure Managed Redis hostname and TLS port."
-    info "Redis endpoint: ${redis_host}:${redis_port}"
-
-    if ! redis_password="$(az redisenterprise database list-keys \
-        --resource-group "${REDIS_RESOURCE_GROUP}" \
-        --cluster-name "${REDIS_NAME}" \
-        --query primaryKey \
-        --output tsv)"; then
-        fail "Could not retrieve the Redis access key. Enable access-key authentication on the default database and retry."
-    fi
-    [[ -n "${redis_password}" ]] || fail "Azure Managed Redis returned an empty access key."
-
-    step "Creating an isolated namespace and Kubernetes Secret"
+    step "Creating an isolated namespace"
     info "Namespace: ${NAMESPACE}"
     ensure_namespace
-    printf '%s' "${redis_password}" \
-        | kubectl create secret generic redis-secret \
-            --namespace "${NAMESPACE}" \
-            --from-file=redisPassword=/dev/stdin \
-            --dry-run=client \
-            -o yaml \
-        | kubectl apply -f -
-    unset redis_password
 
-    step "Creating the Dapr state-store component"
-    info "The component tells Dapr how to persist application state in Azure Managed Redis."
-    sed \
-        -e "s#<REDIS_HOST>#${redis_host}#g" \
-        -e "s#<REDIS_PORT>#${redis_port}#g" \
-        "${REPO_ROOT}/deploy/redis.yaml" \
-        | kubectl apply --namespace "${NAMESPACE}" -f -
+    step "Deploying Redis and the Dapr state-store component"
+    info "Redis runs inside the quickstart namespace and stores temporary sample data."
+    kubectl apply --namespace "${NAMESPACE}" -f "${REPO_ROOT}/deploy/redis.yaml"
+    kubectl rollout status deployment/redis --namespace "${NAMESPACE}" --timeout=180s
 
     step "Deploying the Node.js app with a Dapr sidecar"
     info "The dapr.io annotations request sidecar injection and assign app ID 'nodeapp'."
