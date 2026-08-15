@@ -18,7 +18,6 @@ REDIS_NAME="${REDIS_NAME:-}"
 NAMESPACE="${K8S_NAMESPACE:-dapr-quickstart}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
 PORT_FORWARD_PID=""
-LOG_FILE=""
 NAMESPACE_OWNER_KEY="samples.azure.com/managed-by"
 NAMESPACE_OWNER_VALUE="dapr-aks-extension-quickstart"
 
@@ -60,20 +59,6 @@ step() {
 
 info() {
     printf '[%s] [INFO] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
-}
-
-initialize_logging() {
-    local log_dir
-
-    command -v tee >/dev/null 2>&1 || fail "Required command 'tee' was not found."
-    log_dir="${DAPR_QUICKSTART_LOG_DIR:-${XDG_STATE_HOME:-${HOME}/.local/state}/dapr-aks-extension-quickstart}"
-    mkdir -p "${log_dir}"
-    LOG_FILE="${log_dir}/quickstart-$(date -u +'%Y%m%dT%H%M%SZ').log"
-    exec > >(tee -a "${LOG_FILE}") 2>&1
-
-    info "Action: ${ACTION}"
-    info "Log file: ${LOG_FILE}"
-    info "Sensitive Redis credentials are not written to this log."
 }
 
 require_command() {
@@ -410,7 +395,6 @@ deploy() {
     info "Inspect the component with: kubectl get component statestore -n ${NAMESPACE} -o yaml"
     info "Watch persisted orders with: kubectl logs -n ${NAMESPACE} -l app=node -c node -f"
     info "Run './scripts/quickstart.sh cleanup --namespace ${NAMESPACE}' when finished."
-    info "Full log: ${LOG_FILE}"
 }
 
 verify() {
@@ -455,15 +439,15 @@ cleanup() {
 
 case "${ACTION}" in
     deploy)
-        initialize_logging
+        info "Action: deploy"
         deploy
         ;;
     verify)
-        initialize_logging
+        info "Action: verify"
         verify
         ;;
     cleanup)
-        initialize_logging
+        info "Action: cleanup"
         cleanup
         ;;
     --help|-h)
