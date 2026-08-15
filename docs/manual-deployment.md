@@ -91,7 +91,7 @@ In a separate terminal, create temporary local access:
 
 ```bash
 kubectl port-forward \
-  --namespace dapr-quickstart \
+  --namespace "$QUICKSTART_NAMESPACE" \
   service/nodeapp 8080:80
 ```
 

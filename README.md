@@ -50,10 +50,10 @@ Steps, successful checks, warnings, and errors use distinct terminal colors. Set
 
 ### 3. Explore
 
-Use the namespace configured in `.env`:
+Load the namespace configured in `.env`:
 
 ```bash
-export QUICKSTART_NAMESPACE=dapr-quickstart
+export QUICKSTART_NAMESPACE="$(grep '^K8S_NAMESPACE=' .env | cut -d= -f2-)"
 ```
 
 Inspect the applications, services, and Dapr component:
@@ -120,9 +120,9 @@ kubectl get customresourcedefinition components.dapr.io
 Check application status and logs:
 
 ```bash
-kubectl get pods -n dapr-quickstart
-kubectl describe pods -n dapr-quickstart
-kubectl logs -n dapr-quickstart -l app=node -c daprd
+kubectl get pods -n "$QUICKSTART_NAMESPACE"
+kubectl describe pods -n "$QUICKSTART_NAMESPACE"
+kubectl logs -n "$QUICKSTART_NAMESPACE" -l app=node -c daprd
 ```
 
 Azure Policy can warn that the sample images aren't on the cluster's approved-image list. If the policy blocks deployment, mirror the images to an approved registry and update the manifests.
@@ -130,7 +130,7 @@ Azure Policy can warn that the sample images aren't on the cluster's approved-im
 If cleanup leaves the namespace in `Terminating`, inspect it:
 
 ```bash
-kubectl describe namespace dapr-quickstart
+kubectl describe namespace "$QUICKSTART_NAMESPACE"
 ```
 
 Stale API discovery or third-party finalizers on the cluster can delay namespace deletion even after all quickstart resources are removed.
