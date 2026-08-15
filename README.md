@@ -14,7 +14,7 @@ This quickstart demonstrates:
 
 - Bash on WSL, Linux, or macOS.
 - [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli).
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) compatible with the AKS Kubernetes version.
 - `curl`.
 - An AKS cluster with the [Dapr extension](https://learn.microsoft.com/azure/aks/dapr-overview).
 
@@ -46,6 +46,7 @@ LOCAL_PORT=8080
 ```
 
 The script prints deployment progress and verification results directly to the console.
+Steps, successful checks, warnings, and errors use distinct terminal colors. Set `NO_COLOR=1` to disable colors.
 
 ### 3. Explore
 
@@ -123,6 +124,16 @@ kubectl get pods -n dapr-quickstart
 kubectl describe pods -n dapr-quickstart
 kubectl logs -n dapr-quickstart -l app=node -c daprd
 ```
+
+Azure Policy can warn that the sample images aren't on the cluster's approved-image list. If the policy blocks deployment, mirror the images to an approved registry and update the manifests.
+
+If cleanup leaves the namespace in `Terminating`, inspect it:
+
+```bash
+kubectl describe namespace dapr-quickstart
+```
+
+Stale API discovery or third-party finalizers on the cluster can delay namespace deletion even after all quickstart resources are removed.
 
 ## Next steps
 

@@ -16,8 +16,27 @@ CLUSTER="${AKS_CLUSTER_NAME:-}"
 NAMESPACE="${K8S_NAMESPACE:-dapr-quickstart}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
 PORT_FORWARD_PID=""
+CONFIG_FILE=""
 NAMESPACE_OWNER_KEY="samples.azure.com/managed-by"
 NAMESPACE_OWNER_VALUE="dapr-aks-extension-quickstart"
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]] || [[ "${FORCE_COLOR:-0}" == "1" ]]; then
+    COLOR_RESET=$'\033[0m'
+    COLOR_BOLD=$'\033[1m'
+    COLOR_BLUE=$'\033[34m'
+    COLOR_CYAN=$'\033[36m'
+    COLOR_GREEN=$'\033[32m'
+    COLOR_YELLOW=$'\033[33m'
+    COLOR_RED=$'\033[31m'
+else
+    COLOR_RESET=""
+    COLOR_BOLD=""
+    COLOR_BLUE=""
+    COLOR_CYAN=""
+    COLOR_GREEN=""
+    COLOR_YELLOW=""
+    COLOR_RED=""
+fi
 
 usage() {
     cat <<'EOF'
@@ -44,17 +63,31 @@ EOF
 }
 
 fail() {
-    printf '[%s] [ERROR] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+    printf '%s[%s] [ERROR]%s %s\n' \
+        "${COLOR_BOLD}${COLOR_RED}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "${COLOR_RESET}" "$*" >&2
     exit 1
 }
 
 step() {
     echo
-    printf '[%s] [STEP] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+    printf '%s[%s] [STEP]%s %s%s%s\n' \
+        "${COLOR_BOLD}${COLOR_CYAN}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "${COLOR_RESET}" \
+        "${COLOR_BOLD}" "$*" "${COLOR_RESET}"
 }
 
 info() {
-    printf '[%s] [INFO] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
+    printf '%s[%s] [INFO]%s %s\n' \
+        "${COLOR_BLUE}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "${COLOR_RESET}" "$*"
+}
+
+success() {
+    printf '%s[%s] [SUCCESS]%s %s\n' \
+        "${COLOR_BOLD}${COLOR_GREEN}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "${COLOR_RESET}" "$*"
+}
+
+warn() {
+    printf '%s[%s] [WARNING]%s %s\n' \
+        "${COLOR_BOLD}${COLOR_YELLOW}" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "${COLOR_RESET}" "$*"
 }
 
 require_command() {
@@ -96,7 +129,7 @@ connect_cluster() {
         --resource-group "${RESOURCE_GROUP}" \
         --name "${CLUSTER}" \
         --overwrite-existing >/dev/null
-    info "kubectl context: $(kubectl config current-context)"
+    success "Connected kubectl context: $(kubectl config current-context)"
 }
 
 ensure_namespace() {
@@ -107,14 +140,14 @@ ensure_namespace() {
             -o go-template="{{ index .metadata.labels \"${NAMESPACE_OWNER_KEY}\" }}")"
         [[ "${owner}" == "${NAMESPACE_OWNER_VALUE}" ]] \
             || fail "Namespace '${NAMESPACE}' already exists and isn't owned by this quickstart. Choose another namespace."
-        info "Reusing quickstart-owned namespace: ${NAMESPACE}"
+        success "Reusing quickstart-owned namespace: ${NAMESPACE}"
         return
     fi
 
     kubectl create namespace "${NAMESPACE}"
     kubectl label namespace "${NAMESPACE}" \
         "${NAMESPACE_OWNER_KEY}=${NAMESPACE_OWNER_VALUE}" >/dev/null
-    info "Created quickstart-owned namespace: ${NAMESPACE}"
+    success "Created quickstart-owned namespace: ${NAMESPACE}"
 }
 
 load_config() {
@@ -174,7 +207,8 @@ args=("$@")
 for ((index = 0; index < ${#args[@]}; index++)); do
     if [[ "${args[index]}" == "--config" ]]; then
         ((index + 1 < ${#args[@]})) || fail "--config requires a value."
-        load_config "${args[index + 1]}"
+        CONFIG_FILE="${args[index + 1]}"
+        load_config "${CONFIG_FILE}"
         index=$((index + 1))
     fi
 done
@@ -183,6 +217,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config)
             [[ $# -ge 2 ]] || fail "$1 requires a value."
+            CONFIG_FILE="${2:-}"
             shift 2
             ;;
         --subscription)
@@ -227,7 +262,7 @@ start_port_forward() {
 
     for _ in {1..30}; do
         if curl --fail --silent "http://localhost:${LOCAL_PORT}/ports" >/dev/null; then
-            info "Local port-forward is ready."
+            success "Local port-forward is ready."
             return
         fi
         if ! kill -0 "${PORT_FORWARD_PID}" 2>/dev/null; then
@@ -250,11 +285,11 @@ verify_node() {
 
     [[ "${service_type}" == "ClusterIP" ]] || fail "nodeapp must be a ClusterIP service, but is ${service_type}."
     [[ -z "${external_ip}" ]] || fail "nodeapp unexpectedly has external IP ${external_ip}."
-    info "Service nodeapp is private: type=${service_type}, externalIP=none."
+    success "Service nodeapp is private: type=${service_type}, externalIP=none."
 
     start_port_forward
     ports="$(curl --fail --silent --show-error "http://localhost:${LOCAL_PORT}/ports")"
-    info "GET /ports response: ${ports}"
+    success "GET /ports response: ${ports}"
     info "POST /neworder using sample.json."
     curl --fail --silent --show-error \
         --request POST \
@@ -262,7 +297,7 @@ verify_node() {
         --header "Content-Type: application/json" \
         "http://localhost:${LOCAL_PORT}/neworder" >/dev/null
     order="$(curl --fail --silent --show-error "http://localhost:${LOCAL_PORT}/order")"
-    info "GET /order response: ${order}"
+    success "GET /order response: ${order}"
 }
 
 verify_python() {
@@ -276,7 +311,7 @@ verify_python() {
         sleep 1
         current_order="$(curl --fail --silent --show-error "http://localhost:${LOCAL_PORT}/order")"
         if [[ "${current_order}" != "${initial_order}" ]]; then
-            info "Python publisher updated the order through Dapr service invocation: ${current_order}"
+            success "Python publisher updated the order through Dapr service invocation: ${current_order}"
             return
         fi
     done
@@ -300,7 +335,7 @@ deploy() {
 
     kubectl get customresourcedefinition components.dapr.io >/dev/null \
         || fail "Dapr is not installed on the AKS cluster."
-    info "Dapr component CRD is installed."
+    success "Dapr component CRD is installed."
 
     step "Creating an isolated namespace"
     info "Namespace: ${NAMESPACE}"
@@ -332,11 +367,15 @@ deploy() {
     kubectl get pods,services,components.dapr.io --namespace "${NAMESPACE}" -o wide
 
     step "Quickstart completed"
-    info "Quickstart deployment and verification completed successfully."
+    success "Quickstart deployment and verification completed successfully."
     info "Inspect the sidecars with: kubectl get pods -n ${NAMESPACE}"
     info "Inspect the component with: kubectl get component statestore -n ${NAMESPACE} -o yaml"
     info "Watch persisted orders with: kubectl logs -n ${NAMESPACE} -l app=node -c node -f"
-    info "Run './scripts/quickstart.sh cleanup --namespace ${NAMESPACE}' when finished."
+    if [[ -n "${CONFIG_FILE}" ]]; then
+        info "Run './scripts/quickstart.sh cleanup --config ${CONFIG_FILE}' when finished."
+    else
+        info "Run the cleanup command from the README when finished."
+    fi
 }
 
 verify() {
@@ -366,7 +405,7 @@ cleanup() {
     connect_cluster
 
     if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
-        info "Namespace '${NAMESPACE}' doesn't exist; nothing to delete."
+        warn "Namespace '${NAMESPACE}' doesn't exist; nothing to delete."
         return
     fi
 
@@ -377,6 +416,16 @@ cleanup() {
 
     kubectl delete namespace "${NAMESPACE}" --ignore-not-found --wait=false
     info "Namespace deletion requested: ${NAMESPACE}"
+
+    for _ in {1..30}; do
+        if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
+            success "Namespace removed: ${NAMESPACE}"
+            return
+        fi
+        sleep 2
+    done
+
+    warn "Namespace '${NAMESPACE}' is still terminating. Check 'kubectl describe namespace ${NAMESPACE}' for cluster API discovery or finalizer issues."
 }
 
 case "${ACTION}" in
